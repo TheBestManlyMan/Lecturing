@@ -68,7 +68,7 @@
                 border: 1px solid rgba(0,0,0,0.2);
                 padding-left: 20px;
                 padding-right:20px;
-                padding-bttom:20px;
+                padding-bottom:20px;
                 border-radius: 5px;
                 margin-bottom: 20px;
                 overflow-x:hidden;
@@ -190,8 +190,9 @@
                 const SEND_KEY_CODE = 13; //Enter 
                 
                 listenToMessages(function(data){
-                    $(chatElemID).append(`<div><span class="col-md-1 text-right"><b>${data.username}: </b></span><div class="col-md-11 message-text">${data.message}</div></div>`);
+                    $(chatElemID).append(`<div class="row" style="padding-top:20px"><span class="col-md-1 text-right"><b>${data.username}: </b></span><div class="col-md-11 message-text">${data.message}</div></div>`);
                     updateChatScroll();
+                    updateWindowName(`${data.username} sent a message!`);
                 });
 
                 $(messageInputElemID).keydown(function (e){
@@ -204,6 +205,10 @@
                         }
                     }
                 });
+
+                function updateWindowName(name){
+                    document.title = name;
+                }
 
                 function clearInput(){
                     $(messageInputElemID).val('');
@@ -223,6 +228,7 @@
                 }
 
                 function listenToMessages(callback){
+                    
                     return chatReference.child(0).child('content').on('child_added',function (snapshot){
                         return callback(snapshot.val());
                     });
