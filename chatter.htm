@@ -1,0 +1,234 @@
+
+<html>
+    <head>
+            <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" type="text/css"/>
+
+            <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+
+            <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+
+            <script src="https://www.gstatic.com/firebasejs/4.8.2/firebase.js"></script>
+            <script src="https://www.gstatic.com/firebasejs/4.8.2/firebase-app.js"></script>
+            <script src="https://www.gstatic.com/firebasejs/4.8.2/firebase-database.js"></script>
+
+            <script>
+                const CAN_EDIT = true;
+
+                var config = {
+                    apiKey: "AIzaSyAGzPuH9wFu0gAvb3Au3uSpuYNptLyOCeM",
+                    authDomain: "boringlectures-af0d4.firebaseapp.com",
+                    databaseURL: "https://boringlectures-af0d4.firebaseio.com",
+                    projectId: "boringlectures-af0d4",
+                    storageBucket: "boringlectures-af0d4.appspot.com",
+                    messagingSenderId: "513773484770"
+                };
+                const firebaseApp = firebase.initializeApp(config);
+                const database = firebaseApp.database();
+
+                let logged_in = false;
+                let ID = false;               
+            </script>
+
+            <script>
+                class Delay{
+                    consturctor(){
+                        this.timer = null;
+                    } 
+
+                    start(callback,ms){
+                        this.stop();
+                        callback();
+                        this.timer  = setTimeout(callback, ms);
+                    }
+
+                    startSkipFirst(callback, ms){
+                        this.stop();
+                        this.timer = setTimeout(callback, ms);
+                    }
+
+                    stop(){
+                        clearTimeout(this.timer);
+                    }
+                }
+            </script>
+    </head>
+    <body class="container" style="padding-top:20px">
+        <div id="not-logged-in-container" class="form-group">
+            <div class="col-md-3">
+                <input id="loggin-input" class="form-control" type="text" placeholder="Username" autofocus/>
+            </div>
+            <button id="loggin-attempt" class="btn btn-primary col-md-1">Connect</button>
+        </div>
+        <div id="logged-in-container">
+            
+            <div id="chat-room" style="
+                margin-top: 10px;
+                height: 70%;
+                padding-top: 10px;
+                border: 1px solid rgba(0,0,0,0.2);
+                padding-left: 20px;
+                padding-right:20px;
+                padding-bttom:20px;
+                border-radius: 5px;
+                margin-bottom: 20px;
+                overflow-x:hidden;
+                position:relative;
+                overflow-y:scroll;
+            "></div>
+            <div class="form-group" style="position:relative; height:100px">
+                <textarea id="message-input" class="form-control" style="height:100px; resize:none;" autofocus></textarea>
+                <p style="position:absolute; bottom:0px; right:10px; color:rgba(0,0,0,0.3)">Press Enter to Send</p>
+            </div>
+            <div class="text-right" style="padding-top:5px">
+                    <button id="disconnect-attempt" class="btn btn-danger" style="margin-right:10px">Disconnect</button>
+                    <button id="disconnect-attempt" class="btn btn-primary" style="width:150px;">Save</button>
+            </div>
+        </div>
+        <!-- User & Session Control -->
+        <script>
+            (function(){
+                const databasePingRef = database.ref('ping');
+                const pingDelay = new Delay();
+
+                const PING_DELAY = 45*1000;
+                const VALID_SESSION_TIME = 60*1000; 
+
+                let chat = null;
+
+                $("#loggin-attempt").click(function(){
+                    const username = $("#loggin-input").val();
+                    console.log("Attempting to connect on behalf of: "+username);
+                    if(username){
+                        attemptLogin(username);
+                        $("#loggin-input").val("");
+                    }
+                });
+
+                $("#disconnect-attempt").click(function(){
+                    attemptDisconnect();
+                });
+
+
+                updateView();
+                function attemptLogin(username){
+                    checkUsernameIsTaken(username).then((isTaken) =>{
+                        console.log("Is username taken: "+isTaken);
+                        if(!isTaken){
+                            ID = username;
+                            logged_in = true;
+
+                            startPing();
+                            chat = initChat();
+                            updateView();
+                        }
+                    });
+                }
+
+                function checkUsernameIsTaken(username){
+                    return databasePingRef.child(username).once('value').then((snapshot) => {
+                        const lastPing = snapshot.val();
+
+                        if(lastPing){
+                            const expiryDate = new Date(lastPing);
+                            expiryDate.setMilliseconds(expiryDate.getMilliseconds() + VALID_SESSION_TIME);
+
+                            if(Date.now() < expiryDate){
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+                }
+
+                function attemptDisconnect(){
+                    stopPing();
+
+                    ID = null;
+                    logged_in = false;
+                    chat = null;
+
+                    updateView();
+                }
+
+                function updateView(){
+                    if(!logged_in){
+                        $("#not-logged-in-container").show();
+                        $("#logged-in-container").hide();
+                    } else {
+                        $("#logged-in-container").show();
+                        $("#not-logged-in-container").hide();
+                    }
+                }
+
+                function startPing(){
+                    pingDelay.start(function(){
+                        ping();
+                    }, PING_DELAY);
+                }
+
+                function stopPing(){
+                    pingDelay.stop();
+                    removePing(ID);
+                }
+
+                function ping(){
+                    databasePingRef.child(ID).set(Date.now());
+                }
+
+                function removePing(username){
+                    databasePingRef.child(ID).remove();
+                }
+            })();
+        </script>
+        
+        <!-- Chat Control -->
+        <script>
+            function initChat(){
+                const chatElemID = "#chat-room";
+                const messageInputElemID = "#message-input";
+                const chatReference = database.ref("chat");
+                const SEND_KEY_CODE = 13; //Enter 
+                
+                listenToMessages(function(data){
+                    $(chatElemID).append(`<div><span class="col-md-1 text-right"><b>${data.username}: </b></span><div class="col-md-11 message-text">${data.message}</div></div>`);
+                    updateChatScroll();
+                });
+
+                $(messageInputElemID).keydown(function (e){
+                    if(e.which === SEND_KEY_CODE){
+                        const message = $(this).val();
+
+                        if(message){
+                            sendMessage(ID, message);
+                            clearInput();
+                        }
+                    }
+                });
+
+                function clearInput(){
+                    $(messageInputElemID).val('');
+                }
+
+                function updateChatScroll(){
+                    const elem = $(chatElemID);
+                    elem.scrollTop(elem.prop('scrollHeight'));
+                }
+
+                function sendMessage(username, message){
+                    chatReference.child(0).child('content').push({
+                        username: username,
+                        message: message,
+                        timestamp: Date.now()
+                    });
+                }
+
+                function listenToMessages(callback){
+                    return chatReference.child(0).child('content').on('child_added',function (snapshot){
+                        return callback(snapshot.val());
+                    });
+                }
+
+            }
+        </script>
+    </body>
+</html>
